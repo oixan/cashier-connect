@@ -20,7 +20,7 @@ Schema::table('users', function ($table) {
 });
 ```
 
-## Create yout .env file
+## Create your .env file
 
 You will need to set the Stripe **Testing** Secret env variable before your `vendor/bin/phpunit` call in order to run the Cashier Connect tests:
 
