@@ -612,7 +612,7 @@ trait Billable
             return $key;
         }
 
-        return config('services.stripe.secret');
+        return ( config('services.stripe.secret')? config('services.stripe.secret'): "" ) ;
     }
 
     /**
