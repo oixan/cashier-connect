@@ -27,6 +27,83 @@ trait Billable
     protected static $stripeKey;
 
     /**
+     * The Stripe Connect Account.
+     *
+     * @var Model
+     */
+    protected static $stripeAccount;
+
+    /**
+     * The Stripe Connect Account Temp variable.
+     *
+     * @var Model
+     */
+    protected static $stripeAccountTemp;
+
+
+    /**
+     * Get the stripeAccount ID.
+     *
+     * @param  Model  $account
+     * @return $this
+     */
+    public function getStripeAccount()
+    {
+        return static::$stripeAccount;
+    }
+
+    /**
+     * Set the stripeAccount ID.
+     *
+     * @param  Model  $account
+     * @return $this
+     */
+    public function setStripeAccount($account)
+    {
+        static::$stripeAccount = $account;
+
+        return $this;
+    }
+
+    /**
+     * Unset the stripeAccount ID.
+     *
+     * @param  Model  $account
+     * @return $this
+     */
+    public function unsetStripeAccount()
+    {
+        static::$stripeAccount = null;
+
+        return $this;
+    }
+
+    /**
+     * Save temporaly the stripeAccount ID.
+     *
+     * @param  Model  $account
+     * @return $this
+     */
+    public function pauseStripeAccount()
+    {
+        static::$stripeAccountTemp = static::$stripeAccount;
+        $this->unsetStripeAccount();
+    }
+
+    /**
+     * Restore temporaly the stripeAccount ID.
+     *
+     * @param  Model  $account
+     * @return $this
+     */
+    public function resumeStripeAccount()
+    {   
+        $temp = static::$stripeAccountTemp;
+        static::$stripeAccountTemp = null;
+        return $this->setStripeAccount($temp);
+    }
+
+    /**
      * Make a "one off" charge on the customer for the given amount.
      *
      * @param  int  $amount
@@ -128,7 +205,7 @@ trait Billable
      */
     public function newSubscription($subscription, $plan)
     {
-        return new SubscriptionBuilder($this, $subscription, $plan);
+        return new SubscriptionBuilder($this, $subscription, $plan, $this->getStripeAccount());
     }
 
     /**
@@ -398,7 +475,7 @@ trait Billable
     {
         $customer = $this->asStripeCustomer();
 
-        $token = StripeToken::retrieve($token, ['api_key' => $this->getStripeKey()]);
+        $token = StripeToken::retrieve( $token, $this->buildExtraPayload() );
 
         // If the given token already has the card as their default source, we can just
         // bail out of the method now. We don't need to keep adding the same card to
@@ -407,7 +484,7 @@ trait Billable
             return;
         }
 
-        $card = $customer->sources->create(['source' => $token]);
+        $card = $customer->sources->create(['source' => $token], $this->buildExtraPayload());
 
         $customer->default_source = $card->id;
 
@@ -556,9 +633,7 @@ trait Billable
         // Here we will create the customer instance on Stripe and store the ID of the
         // user from Stripe. This ID will correspond with the Stripe user instances
         // and allow us to retrieve users from Stripe later when we need to work.
-        $customer = StripeCustomer::create(
-            $options, $this->getStripeKey()
-        );
+        $customer = StripeCustomer::create($options, $this->buildExtraPayload());            
 
         $this->stripe_id = $customer->id;
 
@@ -568,13 +643,36 @@ trait Billable
     }
 
     /**
+     * Create a Stripe Sahred customer for the given Stripe model.
+     *
+     * @param  array  $options
+     * @return \Stripe\Customer
+     */
+    public function createAsStripeSharedCustomer(StripeCustomer $customer_platform)
+    {
+        $token = StripeToken::create(["customer" => $customer_platform->id ], $this->buildExtraPayload());
+        $customer = StripeCustomer::create(['source' => $token->id], $this->buildExtraPayload());
+        $customer->email = $customer_platform->email;
+        $customer->save();
+        return $customer ;
+    }
+
+    /**
      * Get the Stripe customer for the Stripe model.
      *
      * @return \Stripe\Customer
      */
     public function asStripeCustomer()
     {
-        return StripeCustomer::retrieve($this->stripe_id, $this->getStripeKey());
+        if ( static::getStripeAccount() ){
+            $customers = StripeCustomer::all(["limit" => 1, "email" => $this->email], $this->buildExtraPayload())->data;
+            if ( count($customers) > 0 )
+                return StripeCustomer::retrieve($customers[0]->id, $this->buildExtraPayload());
+
+            return null;
+        }
+             
+        return StripeCustomer::retrieve($this->stripe_id, $this->buildExtraPayload());
     }
 
     /**
@@ -595,6 +693,18 @@ trait Billable
     public function taxPercentage()
     {
         return 0;
+    }
+
+    /**
+     * Create extra playload with STRIPE_ACCOUNT and API_KEY.
+     *
+     * @return array
+     */
+    public function buildExtraPayload(){
+        return array_filter([
+            "api_key" => $this->getStripeKey(),
+            "stripe_account" => ( $this->getStripeAccount() ? $this->getStripeAccount()->stripe_account_id: null)
+        ]);
     }
 
     /**

@@ -1,5 +1,5 @@
 {
-    "name": "laravel/cashierConnect",
+    "name": "oixan/cashier-connect",
     "description": "Laravel Cashier Connect add support for Stripe Connect to Laravel Cashier.",
     "keywords": ["laravel", "stripe", "billing"],
     "license": "MIT",
