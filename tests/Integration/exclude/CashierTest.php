@@ -6,15 +6,16 @@ use DateTime;
 use Stripe\Plan;
 use Stripe\Token;
 use Carbon\Carbon;
+use Dotenv\Dotenv;
 use Stripe\Coupon;
 use Stripe\Stripe;
 use Stripe\Product;
 use Stripe\ApiResource;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
-use Laravel\CashierConnect\Billable;
 use PHPUnit\Framework\TestCase;
 use Stripe\Error\InvalidRequest;
+use Laravel\CashierConnect\Billable;
 use Illuminate\Database\Schema\Builder;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\ConnectionInterface;
@@ -51,8 +52,11 @@ class CashierTest extends TestCase
 
     public static function setUpBeforeClass()
     {
+        $dotenv = Dotenv::create(__DIR__ . "/../..");
+        $dotenv->load();
+
         Stripe::setApiVersion('2019-03-14');
-        Stripe::setApiKey('STRIPE_KEY');
+        Stripe::setApiKey(getenv('STRIPE_KEY'));
 
         static::setUpStripeTestData();
     }
