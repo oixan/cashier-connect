@@ -14,6 +14,13 @@ class SubscriptionBuilder
      */
     protected $owner;
 
+     /**
+     * The model that is subscribed.
+     *
+     * @var \Illuminate\Database\Eloquent\Model
+     */
+    protected $account = null;
+
     /**
      * The name of the subscription.
      *
@@ -78,11 +85,12 @@ class SubscriptionBuilder
      * @param  string  $plan
      * @return void
      */
-    public function __construct($owner, $name, $plan)
+    public function __construct($owner, $name, $plan, $account)
     {
         $this->name = $name;
         $this->plan = $plan;
         $this->owner = $owner;
+        $this->account = $account;
     }
 
     /**
@@ -201,7 +209,10 @@ class SubscriptionBuilder
     {
         $customer = $this->getStripeCustomer($token, $options);
 
-        $subscription = $customer->subscriptions->create($this->buildPayload());
+        if (! $customer )
+            return ;
+
+        $subscription = $customer->subscriptions->create($this->buildPayload(), $this->owner->buildExtraPayload());
 
         if ($this->skipTrial) {
             $trialEndsAt = null;
@@ -228,6 +239,8 @@ class SubscriptionBuilder
      */
     protected function getStripeCustomer($token = null, array $options = [])
     {
+        $this->owner->pauseStripeAccount();
+
         if ($this->owner->stripe_id) {
             $customer = $this->owner->asStripeCustomer();
         } else {
@@ -236,6 +249,17 @@ class SubscriptionBuilder
 
         if ($token) {
             $this->owner->updateCard($token);
+        }
+
+        $this->owner->resumeStripeAccount();
+
+        // Save the customer in Stripe Connect Account
+        if ( $this->owner->getStripeAccount() ){
+            $customerTemp = $this->owner->asStripeCustomer();
+            if ( !$customerTemp )
+                $customer = $this->owner->createAsStripeSharedCustomer( $customer );
+            else
+                $customer = $customerTemp;
         }
 
         return $customer;
