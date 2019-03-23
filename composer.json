@@ -48,7 +48,7 @@
         },
         "laravel": {
             "providers": [
-                "Laravel\\Cashier\\CashierServiceProvider"
+                "Laravel\\CashierConnect\\CashierServiceProvider"
             ]
         }
     },
