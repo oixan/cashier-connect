@@ -47,6 +47,7 @@ $this->pauseStripeAccount // Pause the userAccount, cashier will work with defau
 $this->resumeStripeAccount  // Resume the previous userAccount, cashier call will go to Stripe Account
 ```
 
+*** IMPORTANT *** any further call after setStripeAccount() will be direct to Stripe Account so remember to call unsetStripeAccount() if needed.
 
 ## Methods Supperted (Version 0.0.2).
 
@@ -116,6 +117,28 @@ $user->subscription('main')->decrementQuantity();
 
 // Subtract five to the subscription's current quantity...
 $user->subscription('main')->decrementQuantity(5);
+```
+
+Subscription Ancor Date
+```php
+$user->newSubscription('main', 'premium')
+     ->anchorBillingCycleOn( Carbon::parse('first day of next month'))
+     ->create($token);
+```
+
+Subscription Trials
+```php
+$user->newSubscription('main', 'monthly')
+            ->trialDays(10)
+            ->create($token);
+
+$user->newSubscription('main', 'monthly')
+        ->trialUntil(Carbon::now()->addDays(10))
+        ->create($token);
+
+$user->onTrial('main')
+
+$user->subscription('main')->onTrial()
 ```
 
 Cancelling Subscriptions

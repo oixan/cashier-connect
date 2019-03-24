@@ -239,27 +239,21 @@ class SubscriptionBuilder
      */
     protected function getStripeCustomer($token = null, array $options = [])
     {
-        $this->owner->pauseStripeAccount();
-
+        $customerCreated = false;
         if ($this->owner->stripe_id) {
             $customer = $this->owner->asStripeCustomer();
         } else {
             $customer = $this->owner->createAsStripeCustomer($options);
+            $customerCreated = true;
         }
 
         if ($token) {
             $this->owner->updateCard($token);
         }
 
-        $this->owner->resumeStripeAccount();
-
         // Save the customer in Stripe Connect Account
-        if ( $this->owner->getStripeAccount() ){
-            $customerTemp = $this->owner->asStripeCustomer();
-            if ( !$customerTemp )
-                $customer = $this->owner->createAsStripeSharedCustomer( $customer );
-            else
-                $customer = $customerTemp;
+        if ( $this->owner->getStripeAccount() && $customerCreated ){
+                $customer = $this->owner->createAsStripeSharedCustomer( );
         }
 
         return $customer;
