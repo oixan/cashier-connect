@@ -43,9 +43,6 @@
         }
     },
     "extra": {
-        "branch-alias": {
-            "dev-master": "0.0.3"
-        },
         "laravel": {
             "providers": [
                 "Laravel\\CashierConnect\\CashierServiceProvider"
