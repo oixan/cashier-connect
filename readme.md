@@ -20,6 +20,9 @@ Schema::table('users', function ($table) {
 });
 ```
 
+4) Install the package
+ ```use Billable``` Trailt from ```use Laravel\CashierConnect\Billable```
+
 ## Create your .env file
 
 You will need to set the Stripe **Testing** Secret env variable before your `vendor/bin/phpunit` call in order to run the Cashier Connect tests:
