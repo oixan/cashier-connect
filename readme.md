@@ -20,8 +20,8 @@ Schema::table('users', function ($table) {
 });
 ```
 
-4) Install the package
- ```use Billable``` Trailt from ```use Laravel\CashierConnect\Billable```
+4) Add the Trait to User model 
+ ```use Billable```  from ```use Laravel\CashierConnect\Billable```
 
 ## Create your .env file
 
