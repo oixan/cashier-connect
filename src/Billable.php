@@ -142,7 +142,7 @@ trait Billable
     {
         $options['charge'] = $charge;
 
-        return StripeRefund::create($options, ['api_key' => $this->getStripeKey()]);
+        return StripeRefund::create($options, $this->buildExtraPayload());
     }
 
     /**
@@ -170,14 +170,18 @@ trait Billable
             throw new InvalidArgumentException(class_basename($this).' is not a Stripe customer. See the createAsStripeCustomer method.');
         }
 
+        $stripe_id = $this->stripe_id;
+        if ( $this->getStripeAccount() )
+            $stripe_id = $this->asStripeCustomer()->id;
+
         $options = array_merge([
-            'customer' => $this->stripe_id,
+            'customer' => $stripe_id,
             'amount' => $amount,
             'currency' => $this->preferredCurrency(),
             'description' => $description,
         ], $options);
 
-        return StripeInvoiceItem::create($options, ['api_key' => $this->getStripeKey()]);
+        return StripeInvoiceItem::create($options, $this->buildExtraPayload() );
     }
 
     /**
@@ -297,11 +301,16 @@ trait Billable
      */
     public function invoice(array $options = [])
     {
-        if ($this->stripe_id) {
-            $parameters = array_merge($options, ['customer' => $this->stripe_id]);
+        $stripe_id = $this->stripe_id;
+        if ($stripe_id) {
+
+            if ( $this->getStripeAccount() )
+                $stripe_id = $this->asStripeCustomer()->id;
+
+            $parameters = array_merge($options, ['customer' => $stripe_id]);
 
             try {
-                return StripeInvoice::create($parameters, $this->getStripeKey())->pay();
+                return StripeInvoice::create($parameters, $this->buildExtraPayload() )->pay();
             } catch (StripeErrorInvalidRequest $e) {
                 return false;
             }
@@ -473,6 +482,8 @@ trait Billable
      */
     public function updateCard($token)
     {
+        $this->pauseStripeAccount();
+
         $customer = $this->asStripeCustomer();
 
         $token = StripeToken::retrieve( $token, $this->buildExtraPayload() );
@@ -500,6 +511,42 @@ trait Billable
         $this->fillCardDetails($source);
 
         $this->save();
+
+        $this->resumeStripeAccount();
+
+        if ($this->getStripeAccount())
+            $this->updateCardSharedCustomer();
+
+    }
+
+    /**
+     * Update Shared customer's credit card.
+     *
+     * @param  string  $customer_platform
+     * @return void
+     */
+    public function updateCardSharedCustomer()
+    {
+        $customer = $this->asStripeCustomer();
+
+        if ( !$customer )
+            return
+
+        $token = '';
+        $token = StripeToken::create(["customer" => $this->stripe_id ], $this->buildExtraPayload() );
+
+        // If the given token already has the card as their default source, we can just
+        // bail out of the method now. We don't need to keep adding the same card to
+        // a model's account every time we go through this particular method call.
+        if ($token[$token->type]->id === $customer->default_source) {
+            return;
+        }
+
+        $card = $customer->sources->create(['source' => $token], $this->buildExtraPayload());
+
+        $customer->default_source = $card->id;
+
+        $customer->save();
     }
 
     /**
@@ -633,7 +680,9 @@ trait Billable
         // Here we will create the customer instance on Stripe and store the ID of the
         // user from Stripe. This ID will correspond with the Stripe user instances
         // and allow us to retrieve users from Stripe later when we need to work.
-        $customer = StripeCustomer::create($options, $this->buildExtraPayload());            
+        $this->pauseStripeAccount();
+        $customer = StripeCustomer::create($options, $this->buildExtraPayload());   
+        $this->resumeStripeAccount();
 
         $this->stripe_id = $customer->id;
 
@@ -648,11 +697,11 @@ trait Billable
      * @param  array  $options
      * @return \Stripe\Customer
      */
-    public function createAsStripeSharedCustomer(StripeCustomer $customer_platform)
+    public function createAsStripeSharedCustomer()
     {
-        $token = StripeToken::create(["customer" => $customer_platform->id ], $this->buildExtraPayload());
+        $token = StripeToken::create(["customer" => $this->stripe_id ], $this->buildExtraPayload());
         $customer = StripeCustomer::create(['source' => $token->id], $this->buildExtraPayload());
-        $customer->email = $customer_platform->email;
+        $customer->email = $this->email;
         $customer->save();
         return $customer ;
     }
@@ -664,15 +713,20 @@ trait Billable
      */
     public function asStripeCustomer()
     {
+        $customer = null;
         if ( static::getStripeAccount() ){
             $customers = StripeCustomer::all(["limit" => 1, "email" => $this->email], $this->buildExtraPayload())->data;
             if ( count($customers) > 0 )
                 return StripeCustomer::retrieve($customers[0]->id, $this->buildExtraPayload());
 
-            return null;
+            $customer = StripeCustomer::retrieve($this->stripe_id, $this->getStripeKey() );
+            if ( $customer )
+                $customer = $this->createAsStripeSharedCustomer();
+        }else{
+            $customer = StripeCustomer::retrieve($this->stripe_id, $this->buildExtraPayload() );
         }
              
-        return StripeCustomer::retrieve($this->stripe_id, $this->buildExtraPayload());
+        return $customer;
     }
 
     /**
