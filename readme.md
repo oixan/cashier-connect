@@ -7,7 +7,7 @@ Laravel Cashier Connect add support for Stripe Connect Subscription to laravel C
 
 1) Install the package
 ``` 
-composer require "oixan/cashier-connect 
+composer require "oixan/cashier-connect"
 ```
 
 2) Follow the instructions of cashier in the [official guide](https://laravel.com/docs/5.8/billing#creating-subscriptions "Instructions")
