@@ -42,12 +42,12 @@ Every user can be a customers or an Stripe Account.
 ## Basic Method Added to User model
 
 ```
-$this = user from db or wathever;
-$this->getStripeAccount(); // Check if every cashier call will go to Stripe Account
-$this->setStripeAccount($userAccount); // Pass a User instance then every cashier call will go to Stripe Account
-$this->unsetStripeAccount; // Remove the userAccount, cashier will work with default setting.
-$this->pauseStripeAccount // Pause the userAccount, cashier will work with default setting.
-$this->resumeStripeAccount  // Resume the previous userAccount, cashier call will go to Stripe Account
+$user = user from db or wathever;
+$user->getStripeAccount(); // Check if every cashier call will go to Stripe Account
+$user->setStripeAccount($userAccount); // Pass a User instance then every cashier call will go to Stripe Account
+$user->unsetStripeAccount; // Remove the userAccount, cashier will work with default setting.
+$user->pauseStripeAccount // Pause the userAccount, cashier will work with default setting.
+$user->resumeStripeAccount  // Resume the previous userAccount, cashier call will go to Stripe Account
 ```
 
 *** IMPORTANT *** any further call after setStripeAccount() will be direct to Stripe Account so remember to call unsetStripeAccount() if needed.
