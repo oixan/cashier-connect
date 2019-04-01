@@ -10,7 +10,7 @@ Laravel Cashier Connect add support for Stripe Connect Subscription to laravel C
 composer require "oixan/cashier-connect"
 ```
 
-2) Follow the instructions of cashier in the [official guide](https://laravel.com/docs/5.8/billing#creating-subscriptions "Instructions")
+2) Follow the instructions of cashier in the [official guide](https://laravel.com/docs/5.8/billing#configuration "Instructions")
 
 3) Add fieid in 'users' table
 
