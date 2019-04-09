@@ -267,6 +267,7 @@ class SubscriptionBuilder
     protected function buildPayload()
     {
         return array_filter([
+            'application_fee_percent' => $this->getApplicationFeePercentageForPayload(),
             'billing_cycle_anchor' => $this->billingCycleAnchor,
             'coupon' => $this->coupon,
             'metadata' => $this->metadata,
@@ -302,6 +303,18 @@ class SubscriptionBuilder
     {
         if ($taxPercentage = $this->owner->taxPercentage()) {
             return $taxPercentage;
+        }
+    }
+
+    /**
+     * Get the application percentage for the Stripe payload.
+     *
+     * @return int|float|null
+     */
+    protected function getApplicationFeePercentageForPayload()
+    {
+        if ($feePercentage = $this->owner->applicationFeePercent()) {
+            return $feePercentage;
         }
     }
 }

@@ -750,6 +750,16 @@ trait Billable
     }
 
     /**
+     * Get the application Fee percentage to apply to the subscription.
+     *
+     * @return int|float
+     */
+    public function applicationFeePercent()
+    {
+        return 0;
+    }
+
+    /**
      * Create extra playload with STRIPE_ACCOUNT and API_KEY.
      *
      * @return array

@@ -162,6 +162,18 @@ $user->subscription('main')->resume();
 
 **\*All cashier methods not in list are not tested to work with Stripe Account**
 
+## More.
+
+If you want set an application fee set on user model 
+
+```php
+public function applicationFeePercent()
+{
+    return 40;
+}
+```
+
+
 ## License
 
 Laravel Cashier Connect is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
