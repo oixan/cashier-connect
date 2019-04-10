@@ -46,6 +46,8 @@ final class VerifyWebhookSignature
      */
     public function handle($request, Closure $next)
     {
+        $abort_stripe = false;
+        $abort_stripe_connect = false;
         try {
             WebhookSignature::verifyHeader(
                 $request->getContent(),
@@ -54,8 +56,22 @@ final class VerifyWebhookSignature
                 $this->config->get('services.stripe.webhook.tolerance')
             );
         } catch (SignatureVerification $exception) {
-            $this->app->abort(403);
+            $abort_stripe = true;
         }
+
+        try {
+            WebhookSignature::verifyHeader(
+                $request->getContent(),
+                $request->header('Stripe-Signature'),
+                $this->config->get('services.stripe.webhook.connect_secret'),
+                $this->config->get('services.stripe.webhook.tolerance')
+            );
+        } catch (SignatureVerification $exception) {
+            $abort_stripe_connect = true;
+        }
+
+        if ($abort_stripe && $abort_stripe_connect)
+            $this->app->abort(403);
 
         return $next($request);
     }

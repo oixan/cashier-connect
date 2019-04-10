@@ -173,6 +173,13 @@ public function applicationFeePercent()
 }
 ```
 
+The Web hook from stripe connect have different secret key. Set 
+
+```
+services.stripe.webhook.connect_secret
+```
+
+to allow cashier connect to accept webhook from stripe connect.
 
 ## License
 
