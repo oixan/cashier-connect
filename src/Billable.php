@@ -19,12 +19,6 @@ use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 trait Billable
 {
-    /**
-     * The Stripe API key.
-     *
-     * @var string
-     */
-    protected static $stripeKey;
 
     /**
      * The Stripe Connect Account.
@@ -127,7 +121,7 @@ trait Billable
             throw new InvalidArgumentException('No payment source provided.');
         }
 
-        return StripeCharge::create($options, ['api_key' => $this->getStripeKey()]);
+        return StripeCharge::create($options, Cashier::stripeOptions());
     }
 
     /**
@@ -313,7 +307,10 @@ trait Billable
                 return StripeInvoice::create($parameters, $this->buildExtraPayload() )->pay();
             } catch (StripeErrorInvalidRequest $e) {
                 return false;
-            }
+            } catch (\Exception $e) {
+                return false;
+            } 
+
         }
 
         return true;
@@ -327,9 +324,7 @@ trait Billable
     public function upcomingInvoice()
     {
         try {
-            $stripeInvoice = StripeInvoice::upcoming(
-                ['customer' => $this->stripe_id], ['api_key' => $this->getStripeKey()]
-            );
+            $stripeInvoice = StripeInvoice::upcoming(['customer' => $this->stripe_id], Cashier::stripeOptions());
 
             return new Invoice($this, $stripeInvoice);
         } catch (StripeErrorInvalidRequest $e) {
@@ -347,10 +342,10 @@ trait Billable
     {
         try {
             $stripeInvoice = StripeInvoice::retrieve(
-                $id, $this->getStripeKey()
+                $id, Cashier::stripeOptions()
             );
 
-            $stripeInvoice->lines = StripeInvoice::retrieve($id, $this->getStripeKey())
+            $stripeInvoice->lines = StripeInvoice::retrieve($id, Cashier::stripeOptions())
                         ->lines
                         ->all(['limit' => 1000]);
 
@@ -666,7 +661,7 @@ trait Billable
     }
 
     /**
-     * Create a Stripe customer for the given Stripe model.
+     * Create a Stripe customer for the given model.
      *
      * @param  array  $options
      * @return \Stripe\Customer
@@ -707,7 +702,20 @@ trait Billable
     }
 
     /**
-     * Get the Stripe customer for the Stripe model.
+     * Update the underlying Stripe customer information for the model.
+     *
+     * @param  array  $options
+     * @return \Stripe\Customer
+     */
+    public function updateStripeCustomer(array $options = [])
+    {
+        return StripeCustomer::update(
+            $this->stripe_id, $options, Cashier::stripeOptions()
+        );
+    }
+
+    /**
+     * Get the Stripe customer for the model.
      *
      * @return \Stripe\Customer
      */
@@ -719,7 +727,7 @@ trait Billable
             if ( count($customers) > 0 )
                 return StripeCustomer::retrieve($customers[0]->id, $this->buildExtraPayload());
 
-            $customer = StripeCustomer::retrieve($this->stripe_id, $this->getStripeKey() );
+            $customer = StripeCustomer::retrieve($this->stripe_id, Cashier::stripeOptions() );
             if ( $customer )
                 $customer = $this->createAsStripeSharedCustomer();
         }else{
@@ -766,37 +774,9 @@ trait Billable
      */
     public function buildExtraPayload(){
         return array_filter([
-            "api_key" => $this->getStripeKey(),
+            "api_key" => Cashier::stripeOptions()['api_key'],
             "stripe_account" => ( $this->getStripeAccount() ? $this->getStripeAccount()->stripe_account_id: null)
         ]);
     }
 
-    /**
-     * Get the Stripe API key.
-     *
-     * @return string
-     */
-    public static function getStripeKey()
-    {
-        if (static::$stripeKey) {
-            return static::$stripeKey;
-        }
-
-        if ($key = getenv('STRIPE_SECRET')) {
-            return $key;
-        }
-
-        return ( config('services.stripe.secret')? config('services.stripe.secret'): "" ) ;
-    }
-
-    /**
-     * Set the Stripe API key.
-     *
-     * @param  string  $key
-     * @return void
-     */
-    public static function setStripeKey($key)
-    {
-        static::$stripeKey = $key;
-    }
 }

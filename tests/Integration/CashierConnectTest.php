@@ -54,6 +54,11 @@ class CashierConnectTest extends TestCase
     /**
      * @var string
      */
+    protected static $premiumPlanId;
+
+    /**
+     * @var string
+     */
     protected static $couponId;
 
     public static function setUpBeforeClass()
@@ -61,7 +66,6 @@ class CashierConnectTest extends TestCase
         $dotenv = Dotenv::create(__DIR__ . "/../..");
         $dotenv->load();
 
-        Stripe::setApiVersion('2019-03-14');
         Stripe::setApiKey(getenv('STRIPE_KEY'));
 
         static::setUpStripeTestData();
@@ -72,6 +76,7 @@ class CashierConnectTest extends TestCase
         static::$productId = static::$stripePrefix.'product-1'.Str::random(10);
         static::$planId = static::$stripePrefix.'monthly-10-'.Str::random(10);
         static::$otherPlanId = static::$stripePrefix.'monthly-10-'.Str::random(10);
+        static::$premiumPlanId = static::$stripePrefix.'monthly-20-premium-'.Str::random(10);
         static::$couponId = static::$stripePrefix.'coupon-'.Str::random(10);
 
         Product::create([
@@ -97,6 +102,16 @@ class CashierConnectTest extends TestCase
             'interval' => 'month',
             'billing_scheme' => 'per_unit',
             'amount' => 1000,
+            'product' => static::$productId,
+        ]);
+
+        Plan::create([
+            'id' => static::$premiumPlanId,
+            'nickname' => 'Monthly $20 Premium',
+            'currency' => 'USD',
+            'interval' => 'month',
+            'billing_scheme' => 'per_unit',
+            'amount' => 2000,
             'product' => static::$productId,
         ]);
 
@@ -137,6 +152,16 @@ class CashierConnectTest extends TestCase
             'interval' => 'month',
             'billing_scheme' => 'per_unit',
             'amount' => 1000,
+            'product' => static::$productId,
+        ], ["stripe_account" => static::$accountId ]);
+
+        Plan::create([
+            'id' => static::$premiumPlanId,
+            'nickname' => 'Monthly $20 Premium',
+            'currency' => 'USD',
+            'interval' => 'month',
+            'billing_scheme' => 'per_unit',
+            'amount' => 2000,
             'product' => static::$productId,
         ], ["stripe_account" => static::$accountId ]);
     }
@@ -189,6 +214,7 @@ class CashierConnectTest extends TestCase
 
         static::deleteStripeResource(new Plan(static::$planId));
         static::deleteStripeResource(new Plan(static::$otherPlanId));
+        static::deleteStripeResource(new Plan(static::$premiumPlanId));
         static::deleteStripeResource(new Product(static::$productId));
         static::deleteStripeResource(new Coupon(static::$couponId));
     }
@@ -300,6 +326,59 @@ class CashierConnectTest extends TestCase
         $this->assertNull($invoice->coupon());
         $this->assertInstanceOf(Carbon::class, $invoice->date());
 
+    }
+
+    public function test_swapping_subscription_with_coupon()
+    {
+        $user = User::create([
+            'email' => 'taylor@laravel.com',
+            'name' => 'Taylor Otwell',
+        ]);
+
+        $userAccount = User::create([
+            'email' => 'taylor2@laravel.com',
+            'name' => 'Taylor Otwell',
+            'stripe_account_id' => static::$accountId
+        ]);
+        
+        $user->setStripeAccount($userAccount)->newSubscription('main', static::$planId)->create($this->getTestToken());
+        $subscription = $user->subscription('main');
+
+        // Swap Plan with Coupon
+        $subscription->swap(static::$otherPlanId, [
+            'coupon' => static::$couponId,
+        ]);
+
+        $this->assertEquals(static::$couponId, $subscription->asStripeSubscription()->discount->coupon->id);
+    }
+
+    /**
+     * @group Swapping
+     */
+    public function test_plan_swap_succeeds_even_if_payment_fails()
+    {
+        $user = User::create([
+            'email' => 'taylor@laravel.com',
+            'name' => 'Taylor Otwell',
+        ]);
+
+        $userAccount = User::create([
+            'email' => 'taylor2@laravel.com',
+            'name' => 'Taylor Otwell',
+            'stripe_account_id' => static::$accountId
+        ]);
+
+        $user_stripe = $user->setStripeAccount($userAccount)->newSubscription('main', static::$planId)->create($this->getTestToken());
+        $subscription = $user->subscription('main');
+
+        // Set a faulty card as the customer's default card.
+        $user->updateCard($this->getInvalidCardToken());
+
+        // Attempt to swap and pay with a faulty card.
+        $subscription = $subscription->swap(static::$premiumPlanId);
+
+        // Assert that the plan was swapped.
+        $this->assertEquals(static::$premiumPlanId, $subscription->stripe_plan);
     }
 
     public function test_creating_subscription_with_coupons()
@@ -678,6 +757,21 @@ class CashierConnectTest extends TestCase
 
     }
 
+    public function test_update_stripe_customer()
+    {
+        $user = User::create([
+            'email' => 'taylor@laravel.com',
+            'name' => 'Taylor Otwell',
+        ]);
+
+        $user->createAsStripeCustomer();
+
+        // Update the customers email
+        $customer = $user->updateStripeCustomer(['email' => 'test@laravel.com']);
+
+        $this->assertEquals('test@laravel.com', $customer->email);
+    }
+
     protected function getTestToken()
     {
         return Token::create([
@@ -685,6 +779,18 @@ class CashierConnectTest extends TestCase
                 'number' => '4242424242424242',
                 'exp_month' => 5,
                 'exp_year' => 2020,
+                'cvc' => '123',
+            ],
+        ])->id;
+    }
+
+    protected function getInvalidCardToken()
+    {
+        return Token::create([
+            'card' => [
+                'number' => '4000 0000 0000 0341',
+                'exp_month' => 5,
+                'exp_year' => date('Y') + 1,
                 'cvc' => '123',
             ],
         ])->id;

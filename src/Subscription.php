@@ -345,9 +345,10 @@ class Subscription extends Model
      * Swap the subscription to a new Stripe plan.
      *
      * @param  string  $plan
+     * @param  array  $options
      * @return $this
      */
-    public function swap($plan)
+    public function swap($plan, $options = [])
     {
         $subscription = $this->asStripeSubscription();
 
@@ -361,6 +362,14 @@ class Subscription extends Model
             $subscription->billing_cycle_anchor = $this->billingCycleAnchor;
         }
 
+        // Set additional options on the subscription update, such as
+        // [
+        //     'coupon' => 'TEST_COUPON',
+        // ]
+        foreach ($options as $key => $option) {
+            $subscription->$key = $option;
+        }
+        
         // If no specific trial end date has been set, the default behavior should be
         // to maintain the current trial state, whether that is "active" or to run
         // the swap out with the exact number of days left on this current plan.
@@ -379,7 +388,13 @@ class Subscription extends Model
 
         $subscription->save();
 
-        $this->user->invoice(['subscription' => $subscription->id]);
+        try {
+            $this->user->invoice(['subscription' => $subscription->id]);
+        } catch (StripeCard $exception) {
+            // When the payment for the plan swap fails, we continue to let the user swap to the
+            // new plan. This is because Stripe may attempt to retry the payment later on. If
+            // all attempts to collect payment fail, webhooks will handle any update to it.
+        }
 
         $this->fill([
             'stripe_plan' => $plan,
