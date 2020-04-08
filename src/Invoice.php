@@ -4,8 +4,10 @@ namespace Laravel\CashierConnect;
 
 use Carbon\Carbon;
 use Dompdf\Dompdf;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\View;
 use Stripe\Invoice as StripeInvoice;
+use Stripe\InvoiceLineItem as StripeInvoiceLineItem;
 use Symfony\Component\HttpFoundation\Response;
 
 class Invoice
@@ -23,6 +25,13 @@ class Invoice
      * @var \Stripe\Invoice
      */
     protected $invoice;
+
+    /**
+     * The Stripe invoice items.
+     *
+     * @var \Stripe\Collection|\Stripe\InvoiceLineItem[]
+     */
+    protected $items;
 
     /**
      * Create a new invoice instance.
@@ -63,11 +72,11 @@ class Invoice
     /**
      * Get the raw total amount that was paid (or will be paid).
      *
-     * @return float
+     * @return int
      */
     public function rawTotal()
     {
-        return max(0, $this->invoice->total - ($this->rawStartingBalance() * -1));
+        return $this->invoice->total + $this->rawStartingBalance();
     }
 
     /**
@@ -77,9 +86,7 @@ class Invoice
      */
     public function subtotal()
     {
-        return $this->formatAmount(
-            max(0, $this->invoice->subtotal - $this->rawStartingBalance())
-        );
+        return $this->formatAmount($this->invoice->subtotal);
     }
 
     /**
@@ -89,7 +96,7 @@ class Invoice
      */
     public function hasStartingBalance()
     {
-        return $this->rawStartingBalance() > 0;
+        return $this->rawStartingBalance() < 0;
     }
 
     /**
@@ -100,6 +107,16 @@ class Invoice
     public function startingBalance()
     {
         return $this->formatAmount($this->rawStartingBalance());
+    }
+
+    /**
+     * Get the raw starting balance for the invoice.
+     *
+     * @return int
+     */
+    public function rawStartingBalance()
+    {
+        return $this->invoice->starting_balance ?? 0;
     }
 
     /**
@@ -175,6 +192,16 @@ class Invoice
     }
 
     /**
+     * Get the tax total amount.
+     *
+     * @return string
+     */
+    public function tax()
+    {
+        return $this->formatAmount($this->invoice->tax);
+    }
+
+    /**
      * Get all of the "invoice item" line items.
      *
      * @return array
@@ -202,28 +229,26 @@ class Invoice
      */
     public function invoiceItemsByType($type)
     {
-        $lineItems = [];
-
-        if (isset($this->lines->data)) {
-            foreach ($this->lines->data as $line) {
-                if ($line->type == $type) {
-                    $lineItems[] = new InvoiceItem($this->owner, $line);
-                }
-            }
+        if (is_null($this->items)) {
+            $this->items = new Collection($this->lines->autoPagingIterator());
         }
 
-        return $lineItems;
+        return $this->items->filter(function (StripeInvoiceLineItem $item) use ($type) {
+            return $item->type === $type;
+        })->map(function (StripeInvoiceLineItem $item) {
+            return new InvoiceItem($this->owner, $item);
+        })->all();
     }
 
     /**
-     * Format the given amount into a string based on the Stripe model's preferences.
+     * Format the given amount into a displayable currency.
      *
      * @param  int  $amount
      * @return string
      */
     protected function formatAmount($amount)
     {
-        return Cashier::formatAmount($amount);
+        return Cashier::formatAmount($amount, $this->invoice->currency);
     }
 
     /**
@@ -254,6 +279,7 @@ class Invoice
         }
 
         $dompdf = new Dompdf;
+        $dompdf->setPaper(config('cashier.paper', 'letter'));
         $dompdf->loadHtml($this->view($data)->render());
         $dompdf->render();
 
@@ -268,26 +294,37 @@ class Invoice
      */
     public function download(array $data)
     {
-        $filename = $data['product'].'_'.$this->date()->month.'_'.$this->date()->year.'.pdf';
+        $filename = $data['product'].'_'.$this->date()->month.'_'.$this->date()->year;
 
+        return $this->downloadAs($filename, $data);
+    }
+
+    /**
+     * Create an invoice download response with a specific filename.
+     *
+     * @param  string  $filename
+     * @param  array  $data
+     * @return \Symfony\Component\HttpFoundation\Response
+     */
+    public function downloadAs($filename, array $data)
+    {
         return new Response($this->pdf($data), 200, [
             'Content-Description' => 'File Transfer',
-            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'.pdf"',
             'Content-Transfer-Encoding' => 'binary',
             'Content-Type' => 'application/pdf',
+            'X-Vapor-Base64-Encode' => 'True',
         ]);
     }
 
     /**
-     * Get the raw starting balance for the invoice.
+     * Get the Stripe model instance.
      *
-     * @return float
+     * @return \Illuminate\Database\Eloquent\Model
      */
-    public function rawStartingBalance()
+    public function owner()
     {
-        return isset($this->invoice->starting_balance)
-            ? $this->invoice->starting_balance
-            : 0;
+        return $this->owner;
     }
 
     /**

@@ -1,6 +1,6 @@
 <?php
 
-namespace Laravel\Cashier\Exceptions;
+namespace Laravel\CashierConnect\Exceptions;
 
 use Exception;
 use Stripe\Subscription;

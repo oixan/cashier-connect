@@ -2,34 +2,24 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>Invoice</title>
 
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
-            background: #fff;
-            background-image: none;
+            background: #fff none;
             font-size: 12px;
         }
-        address{
-            margin-top:15px;
-        }
         h2 {
-            font-size:28px;
-            color:#cccccc;
+            font-size: 28px;
+            color: #ccc;
         }
         .container {
-            padding-top:30px;
+            padding-top: 30px;
         }
         .invoice-head td {
             padding: 0 8px;
-        }
-        .invoice-body{
-            background-color:transparent;
-        }
-        .logo {
-            padding-bottom: 10px;
         }
         .table th {
             vertical-align: bottom;
@@ -37,23 +27,22 @@
             padding: 8px;
             line-height: 20px;
             text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        .table tr.row td {
+            border-bottom: 1px solid #ddd;
         }
         .table td {
             padding: 8px;
             line-height: 20px;
             text-align: left;
             vertical-align: top;
-            border-top: 1px solid #dddddd;
-        }
-        .well {
-            margin-top: 15px;
         }
     </style>
 </head>
-
 <body>
 <div class="container">
-    <table style="margin-left: auto; margin-right: auto" width="550">
+    <table style="margin-left: auto; margin-right: auto;" width="550">
         <tr>
             <td width="160">
                 &nbsp;
@@ -65,8 +54,8 @@
             </td>
         </tr>
         <tr valign="top">
-            <td style="font-size:28px;color:#cccccc;">
-                    Receipt
+            <td style="font-size: 28px; color: #ccc;">
+                Receipt
             </td>
 
             <!-- Organization Name / Date -->
@@ -81,18 +70,23 @@
             <!-- Organization Details -->
             <td style="font-size:9px;">
                 {{ $vendor }}<br>
+
                 @if (isset($street))
                     {{ $street }}<br>
                 @endif
+
                 @if (isset($location))
                     {{ $location }}<br>
                 @endif
+
                 @if (isset($phone))
                     <strong>T</strong> {{ $phone }}<br>
                 @endif
+
                 @if (isset($vendorVat))
                     {{ $vendorVat }}<br>
                 @endif
+
                 @if (isset($url))
                     <a href="{{ $url }}">{{ $url }}</a>
                 @endif
@@ -121,16 +115,9 @@
                         <th align="right">Amount</th>
                     </tr>
 
-                    <!-- Existing Balance -->
-                    <tr>
-                        <td>Starting Balance</td>
-                        <td>&nbsp;</td>
-                        <td>{{ $invoice->startingBalance() }}</td>
-                    </tr>
-
                     <!-- Display The Invoice Items -->
                     @foreach ($invoice->invoiceItems() as $item)
-                        <tr>
+                        <tr class="row">
                             <td colspan="2">{{ $item->description }}</td>
                             <td>{{ $item->total() }}</td>
                         </tr>
@@ -138,7 +125,7 @@
 
                     <!-- Display The Subscriptions -->
                     @foreach ($invoice->subscriptions() as $subscription)
-                        <tr>
+                        <tr class="row">
                             <td>Subscription ({{ $subscription->quantity }})</td>
                             <td>
                                 {{ $subscription->startDateAsCarbon()->formatLocalized('%B %e, %Y') }} -
@@ -148,15 +135,25 @@
                         </tr>
                     @endforeach
 
+                    <!-- Display The Subtotal -->
+                    @if ($invoice->hasDiscount() || $invoice->tax_percent || $invoice->hasStartingBalance())
+                        <tr>
+                            <td colspan="2" style="text-align: right;">Subtotal</td>
+                            <td>{{ $invoice->subtotal() }}</td>
+                        </tr>
+                    @endif
+
                     <!-- Display The Discount -->
                     @if ($invoice->hasDiscount())
                         <tr>
-                            @if ($invoice->discountIsPercentage())
-                                <td>{{ $invoice->coupon() }} ({{ $invoice->percentOff() }}% Off)</td>
-                            @else
-                                <td>{{ $invoice->coupon() }} ({{ $invoice->amountOff() }} Off)</td>
-                            @endif
-                            <td>&nbsp;</td>
+                            <td colspan="2" style="text-align: right;">
+                                @if ($invoice->discountIsPercentage())
+                                    {{ $invoice->coupon() }} ({{ $invoice->percentOff() }}% Off)
+                                @else
+                                    {{ $invoice->coupon() }} ({{ $invoice->amountOff() }} Off)
+                                @endif
+                            </td>
+
                             <td>-{{ $invoice->discount() }}</td>
                         </tr>
                     @endif
@@ -164,16 +161,22 @@
                     <!-- Display The Tax Amount -->
                     @if ($invoice->tax_percent)
                         <tr>
-                            <td>Tax ({{ $invoice->tax_percent }}%)</td>
-                            <td>&nbsp;</td>
-                            <td>{{ Laravel\CashierConnect\Cashier::formatAmount($invoice->tax) }}</td>
+                            <td colspan="2" style="text-align: right;">Tax ({{ $invoice->tax_percent }}%)</td>
+                            <td>{{ $invoice->tax() }}</td>
+                        </tr>
+                    @endif
+
+                    <!-- Starting Balance -->
+                    @if ($invoice->hasStartingBalance())
+                        <tr>
+                            <td colspan="2" style="text-align: right;">Customer Balance</td>
+                            <td>{{ $invoice->startingBalance() }}</td>
                         </tr>
                     @endif
 
                     <!-- Display The Final Total -->
-                    <tr style="border-top:2px solid #000;">
-                        <td>&nbsp;</td>
-                        <td style="text-align: right;"><strong>Total</strong></td>
+                    <tr>
+                        <td colspan="2" style="text-align: right;"><strong>Total</strong></td>
                         <td><strong>{{ $invoice->total() }}</strong></td>
                     </tr>
                 </table>

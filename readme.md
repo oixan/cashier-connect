@@ -1,7 +1,7 @@
 
 ## Introduction
 
-Laravel Cashier Connect add support for Stripe Connect Subscription to laravel Cashier (based on v9.3). 
+Laravel Cashier Connect add support for Stripe Connect Subscription to laravel Cashier (based on v10.0.0). 
 
 # Documentation
 
@@ -10,17 +10,10 @@ Laravel Cashier Connect add support for Stripe Connect Subscription to laravel C
 composer require "oixan/cashier-connect"
 ```
 
-2) Follow the instructions of cashier in the [official guide](https://laravel.com/docs/5.8/billing#configuration "Instructions")
+2) Follow the instructions of cashier in the [official guide](https://laravel.com/docs/7.x/billing#configuration "Instructions")
+  The installations process is the same.
 
-3) Add fieid in 'users' table
-
-```php
-Schema::table('users', function ($table) {
-    $table->string('stripe_account_id')->nullable();
-});
-```
-
-4) Add the Trait to User model 
+3) Add the Trait to User model 
  ```use Billable```  from ```use Laravel\CashierConnect\Billable```
 
 ## Create your .env file
@@ -52,13 +45,13 @@ $user->resumeStripeAccount  // Resume the previous userAccount, cashier call wil
 
 *** IMPORTANT *** any further call after setStripeAccount() will be direct to Stripe Account so remember to call unsetStripeAccount() if needed.
 
-## Methods Supperted (Version 0.1.0).
+## Methods Supperted (Version 0.3.0).
 
 The ``` setStripeAccount($userAccount) ``` method make every subsequent call goes from your Platform to Stripe Account passed like parameter. If you need to change the userAccount or pause the StripeAccount call see the previous section.
 
 Creating Subscriptions
  ```php
-    $user->setStripeAccount($userAccount)->newSubscription('main', 'premium')->create($token);
+    $user->setStripeAccount($userAccount)->newSubscription('main', 'plan_id')->create("pm_card_visa");
  ```
  Add user detail
   ```php

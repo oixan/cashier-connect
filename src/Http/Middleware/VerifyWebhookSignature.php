@@ -8,7 +8,7 @@ use Stripe\Error\SignatureVerification;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Config\Repository as Config;
 
-final class VerifyWebhookSignature
+class VerifyWebhookSignature
 {
     /**
      * The application instance.
@@ -52,8 +52,8 @@ final class VerifyWebhookSignature
             WebhookSignature::verifyHeader(
                 $request->getContent(),
                 $request->header('Stripe-Signature'),
-                $this->config->get('services.stripe.webhook.secret'),
-                $this->config->get('services.stripe.webhook.tolerance')
+                $this->config->get('cashier.webhook.secret'),
+                $this->config->get('cashier.webhook.tolerance')
             );
         } catch (SignatureVerification $exception) {
             $abort_stripe = true;
@@ -63,8 +63,8 @@ final class VerifyWebhookSignature
             WebhookSignature::verifyHeader(
                 $request->getContent(),
                 $request->header('Stripe-Signature'),
-                $this->config->get('services.stripe.webhook.connect_secret'),
-                $this->config->get('services.stripe.webhook.tolerance')
+                $this->config->get('cashier.webhook.connect_secret'),
+                $this->config->get('cashier.webhook.tolerance')
             );
         } catch (SignatureVerification $exception) {
             $abort_stripe_connect = true;
