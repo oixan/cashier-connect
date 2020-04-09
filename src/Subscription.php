@@ -3,7 +3,9 @@
 namespace Laravel\CashierConnect;
 
 use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use LogicException;
+use InvalidArgumentException;
 use DateTimeInterface;
 use Illuminate\Database\Eloquent\Model;
 use Stripe\Subscription as StripeSubscription;
@@ -89,7 +91,7 @@ class Subscription extends Model
      */
     public function incomplete()
     {
-        return $this->stripe_status === 'incomplete';
+        return $this->stripe_status === StripeSubscription::STATUS_INCOMPLETE;
     }
 
     /**
@@ -100,7 +102,7 @@ class Subscription extends Model
      */
     public function scopeIncomplete($query)
     {
-        $query->where('stripe_status', 'incomplete');
+        $query->where('stripe_status', StripeSubscription::STATUS_INCOMPLETE);
     }
 
     /**
@@ -110,7 +112,7 @@ class Subscription extends Model
      */
     public function pastDue()
     {
-        return $this->stripe_status === 'past_due';
+        return $this->stripe_status === StripeSubscription::STATUS_PAST_DUE;
     }
 
     /**
@@ -121,7 +123,7 @@ class Subscription extends Model
      */
     public function scopePastDue($query)
     {
-        $query->where('stripe_status', 'past_due');
+        $query->where('stripe_status', StripeSubscription::STATUS_PAST_DUE);
     }
 
     /**
@@ -132,10 +134,10 @@ class Subscription extends Model
     public function active()
     {
         return (is_null($this->ends_at) || $this->onGracePeriod()) &&
-            $this->stripe_status !== 'incomplete' &&
-            $this->stripe_status !== 'incomplete_expired' &&
-            $this->stripe_status !== 'past_due' &&
-            $this->stripe_status !== 'unpaid';
+                $this->stripe_status !== StripeSubscription::STATUS_INCOMPLETE &&
+                $this->stripe_status !== StripeSubscription::STATUS_INCOMPLETE_EXPIRED &&
+                (! Cashier::$deactivatePastDue || $this->stripe_status !== StripeSubscription::STATUS_PAST_DUE) &&
+                $this->stripe_status !== StripeSubscription::STATUS_UNPAID;
     }
 
     /**
@@ -151,10 +153,13 @@ class Subscription extends Model
                 ->orWhere(function ($query) {
                     $query->onGracePeriod();
                 });
-        })->where('stripe_status', '!=', 'incomplete')
-            ->where('stripe_status', '!=', 'incomplete_expired')
-            ->where('stripe_status', '!=', 'past_due')
-            ->where('stripe_status', '!=', 'unpaid');
+            })->where('stripe_status', '!=', StripeSubscription::STATUS_INCOMPLETE)
+                ->where('stripe_status', '!=', StripeSubscription::STATUS_INCOMPLETE_EXPIRED)
+                ->where('stripe_status', '!=', StripeSubscription::STATUS_UNPAID);
+
+        if (Cashier::$deactivatePastDue) {
+            $query->where('stripe_status', '!=', StripeSubscription::STATUS_PAST_DUE);
+        }
     }
 
     /**
@@ -166,7 +171,7 @@ class Subscription extends Model
     {
         $subscription = $this->asStripeSubscription();
 
-        $this->status = $subscription->status;
+        $this->stripe_status = $subscription->status;
 
         $this->save();
     }
@@ -399,6 +404,18 @@ class Subscription extends Model
     }
 
     /**
+     * Indicate that the plan change should be prorated.
+     *
+     * @return $this
+     */
+    public function prorate()
+    {
+        $this->prorate = true;
+
+        return $this;
+    }
+
+    /**
      * Change the billing cycle anchor on a plan change.
      *
      * @param  \DateTimeInterface|int|string  $date
@@ -425,6 +442,31 @@ class Subscription extends Model
     public function skipTrial()
     {
         $this->trial_ends_at = null;
+
+        return $this;
+    }
+
+     /**
+     * Extend an existing subscription's trial period.
+     *
+     * @param  \Carbon\CarbonInterface  $date
+     * @return $this
+     */
+    public function extendTrial(CarbonInterface $date)
+    {
+        if (! $date->isFuture()) {
+            throw new InvalidArgumentException("Extending a subscription's trial requires a date in the future.");
+        }
+
+        $subscription = $this->asStripeSubscription();
+
+        $subscription->trial_end = $date->getTimestamp();
+
+        $subscription->save();
+
+        $this->trial_ends_at = $date;
+
+        $this->save();
 
         return $this;
     }
@@ -556,11 +598,12 @@ class Subscription extends Model
      * Mark the subscription as cancelled.
      *
      * @return void
+     * @internal
      */
     public function markAsCancelled()
     {
         $this->fill([
-            'stripe_status' => 'canceled',
+            'stripe_status' => StripeSubscription::STATUS_CANCELED,
             'ends_at' => Carbon::now(),
         ])->save();
     }
@@ -677,7 +720,7 @@ class Subscription extends Model
     {
         return StripeSubscription::retrieve(
             ['id' => $this->stripe_id, 'expand' => $expand],
-            Cashier::stripeOptions($this->buildExtraPayload()) 
+            $this->owner->stripeOptions()
         );
     }
 }

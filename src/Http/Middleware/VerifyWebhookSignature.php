@@ -7,42 +7,19 @@ use Stripe\WebhookSignature;
 use Stripe\Error\SignatureVerification;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Config\Repository as Config;
+use Stripe\Exception\SignatureVerificationException;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 class VerifyWebhookSignature
 {
-    /**
-     * The application instance.
-     *
-     * @var \Illuminate\Contracts\Foundation\Application
-     */
-    protected $app;
-
-    /**
-     * The configuration repository instance.
-     *
-     * @var \Illuminate\Contracts\Config\Repository
-     */
-    protected $config;
-
-    /**
-     * Create a new middleware instance.
-     *
-     * @param  \Illuminate\Contracts\Foundation\Application  $app
-     * @param  \Illuminate\Contracts\Config\Repository  $config
-     * @return void
-     */
-    public function __construct(Application $app, Config $config)
-    {
-        $this->app = $app;
-        $this->config = $config;
-    }
-
     /**
      * Handle the incoming request.
      *
      * @param  \Illuminate\Http\Request  $request
      * @param  \Closure  $next
      * @return \Illuminate\Http\Response
+     * 
+     * @throws \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException
      */
     public function handle($request, Closure $next)
     {
@@ -52,10 +29,10 @@ class VerifyWebhookSignature
             WebhookSignature::verifyHeader(
                 $request->getContent(),
                 $request->header('Stripe-Signature'),
-                $this->config->get('cashier.webhook.secret'),
-                $this->config->get('cashier.webhook.tolerance')
+                config('cashier.webhook.secret'),
+                config('cashier.webhook.tolerance')
             );
-        } catch (SignatureVerification $exception) {
+        } catch (SignatureVerificationException $exception) {
             $abort_stripe = true;
         }
 
@@ -63,15 +40,15 @@ class VerifyWebhookSignature
             WebhookSignature::verifyHeader(
                 $request->getContent(),
                 $request->header('Stripe-Signature'),
-                $this->config->get('cashier.webhook.connect_secret'),
-                $this->config->get('cashier.webhook.tolerance')
+                config('cashier.webhook.connect_secret'),
+                config('cashier.webhook.tolerance')
             );
-        } catch (SignatureVerification $exception) {
+        } catch (SignatureVerificationException $exception) {
             $abort_stripe_connect = true;
         }
 
         if ($abort_stripe && $abort_stripe_connect)
-            $this->app->abort(403);
+            throw new AccessDeniedHttpException($exception->getMessage(), $exception);
 
         return $next($request);
     }

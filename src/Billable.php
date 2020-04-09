@@ -5,16 +5,18 @@ namespace Laravel\CashierConnect;
 use Exception;
 use InvalidArgumentException;
 use Stripe\Card as StripeCard;
+use Stripe\Exception\CardException as StripeCardException;
+use Stripe\Exception\InvalidRequestException as StripeInvalidRequestException;
+use Stripe\Invoice as StripeInvoice;
 use Stripe\Token as StripeToken;
 use Illuminate\Support\Collection;
+use Laravel\CashierConnect\Exceptions\InvalidInvoice;
 use Stripe\Charge as StripeCharge;
 use Stripe\Refund as StripeRefund;
-use Stripe\Invoice as StripeInvoice;
 use Stripe\Customer as StripeCustomer;
 use Stripe\BankAccount as StripeBankAccount;
 use Stripe\InvoiceItem as StripeInvoiceItem;
 use Stripe\SetupIntent as StripeSetupIntent;
-use Stripe\Error\Card as StripeCardException;
 use Stripe\PaymentIntent as StripePaymentIntent;
 use Stripe\PaymentMethod as StripePaymentMethod;
 use Laravel\CashierConnect\Exceptions\InvalidStripeCustomer;
@@ -33,6 +35,9 @@ trait Billable
      * @param  string  $paymentMethod
      * @param  array  $options
      * @return \Laravel\Cashier\Payment
+     *      
+     * @throws \Laravel\Cashier\Exceptions\PaymentActionRequired
+     * @throws \Laravel\Cashier\Exceptions\PaymentFailure
      */
     public function charge($amount, $paymentMethod, array $options = [])
     {
@@ -50,7 +55,7 @@ trait Billable
         }
 
         $payment = new Payment(
-            StripePaymentIntent::create( $options, Cashier::stripeOptions($this->buildExtraPayload()) )
+            StripePaymentIntent::create($options, $this->stripeOptions())
         );
 
         $payment->validate();
@@ -67,9 +72,10 @@ trait Billable
      */
     public function refund($paymentIntent, array $options = [])
     {
-        $intent = StripePaymentIntent::retrieve($paymentIntent, Cashier::stripeOptions());
-
-        return $intent->charges->data[0]->refund($options);
+        return StripeRefund::create(
+            ['payment_intent' => $paymentIntent] + $options,
+            $this->stripeOptions()
+        );
     }
 
     /**
@@ -106,7 +112,7 @@ trait Billable
             'description' => $description,
         ], $options);
 
-        return StripeInvoiceItem::create($options, Cashier::stripeOptions());
+        return StripeInvoiceItem::create($options, $this->stripeOptions());
     }
 
     /**
@@ -117,6 +123,9 @@ trait Billable
      * @param  array  $tabOptions
      * @param  array  $invoiceOptions
      * @return \Laravel\Cashier\Invoice|bool
+     * 
+     * @throws \Laravel\Cashier\Exceptions\PaymentActionRequired
+     * @throws \Laravel\Cashier\Exceptions\PaymentFailure
      */
     public function invoiceFor($description, $amount, array $tabOptions = [], array $invoiceOptions = [])
     {
@@ -237,6 +246,9 @@ trait Billable
      *
      * @param  array  $options
      * @return \Laravel\Cashier\Invoice|bool
+     *  
+     * @throws \Laravel\Cashier\Exceptions\PaymentActionRequired
+     * @throws \Laravel\Cashier\Exceptions\PaymentFailure
      */
     public function invoice(array $options = [])
     {
@@ -252,18 +264,18 @@ trait Billable
 
             try {
                 /** @var \Stripe\Invoice $invoice */
-                $stripeInvoice = StripeInvoice::create( $parameters, Cashier::stripeOptions($this->buildExtraPayload()) );
+                $stripeInvoice = StripeInvoice::create($parameters, $this->stripeOptions());
 
                 $stripeInvoice = $stripeInvoice->pay();
 
                 return new Invoice($this, $stripeInvoice);
-            } catch (StripeErrorInvalidRequest $e) {
+            } catch (StripeInvalidRequestException $exception) {
                 return false;
             }catch (StripeCardException $exception) {
                     $payment = new Payment(
                         StripePaymentIntent::retrieve(
                             ['id' => $stripeInvoice->refresh()->payment_intent, 'expand' => ['invoice.subscription']],
-                            Cashier::stripeOptions($this->buildExtraPayload())
+                            $this->stripeOptions()
                         )
                     );
         
@@ -287,10 +299,10 @@ trait Billable
         $this->assertCustomerExists();
         
         try {
-            $stripeInvoice = StripeInvoice::upcoming(['customer' => $this->stripe_id], Cashier::stripeOptions());
+            $stripeInvoice = StripeInvoice::upcoming(['customer' => $this->stripe_id], $this->stripeOptions());
 
             return new Invoice($this, $stripeInvoice);
-        } catch (StripeErrorInvalidRequest $e) {
+        } catch (StripeInvalidRequestException $exception) {
             //
         }
     }
@@ -303,19 +315,17 @@ trait Billable
      */
     public function findInvoice($id)
     {
+        $stripeInvoice = null;
+
         try {
             $stripeInvoice = StripeInvoice::retrieve(
-                $id, Cashier::stripeOptions()
+                $id, $this->stripeOptions()
             );
-
-            $stripeInvoice->lines = StripeInvoice::retrieve($id, Cashier::stripeOptions())
-                        ->lines
-                        ->all(['limit' => 1000]);
-
-            return new Invoice($this, $stripeInvoice);
         } catch (Exception $e) {
             //
         }
+
+        return $stripeInvoice ? new Invoice($this, $stripeInvoice) : null;
     }
 
     /**
@@ -326,14 +336,14 @@ trait Billable
      */
     public function findInvoiceOrFail($id)
     {
-        $invoice = $this->findInvoice($id);
+        try {
+            $invoice = $this->findInvoice($id);
+        } catch (InvalidInvoice $exception) {
+            throw new AccessDeniedHttpException;
+        }
 
         if (is_null($invoice)) {
             throw new NotFoundHttpException;
-        }
-
-        if ($invoice->customer !== $this->stripe_id) {
-            throw new AccessDeniedHttpException;
         }
 
         return $invoice;
@@ -366,7 +376,12 @@ trait Billable
 
         $parameters = array_merge(['limit' => 24], $parameters);
 
-        $stripeInvoices = $this->asStripeCustomer()->invoices($parameters);
+        $customer = $this->asStripeCustomer();
+
+        $stripeInvoices = StripeInvoice::all(
+            ['customer' => $customer->id ] + $parameters,
+            $this->stripeOptions()
+        );
 
         // Here we will loop through the Stripe invoices and create our own custom Invoice
         // instances that have more helper methods and are generally more convenient to
@@ -402,7 +417,7 @@ trait Billable
     public function createSetupIntent(array $options = [])
     {
         return StripeSetupIntent::create(
-            $options, Cashier::stripeOptions($this->buildExtraPayload())
+            $options, $this->stripeOptions()
         );
     }
     /**
@@ -433,7 +448,7 @@ trait Billable
 
         $paymentMethods = StripePaymentMethod::all(
             ['customer' => $customer->id, 'type' => 'card'] + $parameters,
-            Cashier::stripeOptions($this->buildExtraPayload())
+            $this->stripeOptions()
         );
 
         return collect($paymentMethods->data)->map(function ($paymentMethod) {
@@ -455,7 +470,7 @@ trait Billable
 
         if ($stripePaymentMethod->customer !== $this->stripe_id) {
             $stripePaymentMethod = $stripePaymentMethod->attach(
-                ['customer' => $customer->id], Cashier::stripeOptions($this->buildExtraPayload())
+                ['customer' => $customer->id], $this->stripeOptions()
             );
         }
 
@@ -471,19 +486,25 @@ trait Billable
     public function removePaymentMethod($paymentMethod)
     {
         $this->assertCustomerExists();
+
         $stripePaymentMethod = $this->resolveStripePaymentMethod($paymentMethod);
-        if ($stripePaymentMethod->customer === $this->stripe_id) {
-            $customer = $this->asStripeCustomer();
-            // If payment method was the default payment method, we'll remove it manually...
-            if ($stripePaymentMethod->id === $customer->invoice_settings->default_payment_method) {
-                $customer->invoice_settings = ['default_payment_method' => null];
-                $customer->save(Cashier::stripeOptions());
-                $this->forceFill([
-                    'card_brand' => null,
-                    'card_last_four' => null,
-                ])->save();
-            }
-            $stripePaymentMethod->detach(null, Cashier::stripeOptions());
+
+        if ($stripePaymentMethod->customer !== $this->stripe_id) {
+            return;
+        }
+
+        $customer = $this->asStripeCustomer();
+
+        $defaultPaymentMethod = $customer->invoice_settings->default_payment_method;
+
+        $stripePaymentMethod->detach(null, $this->stripeOptions());
+
+        // If the payment method was the default payment method, we'll remove it manually...
+        if ($stripePaymentMethod->id === $defaultPaymentMethod) {
+            $this->forceFill([
+                'card_brand' => null,
+                'card_last_four' => null,
+            ])->save();
         }
     }
 
@@ -503,10 +524,12 @@ trait Billable
                 'invoice_settings.default_payment_method',
                 'default_source',
             ],
-        ], Cashier::stripeOptions());
+        ], $this->stripeOptions());
+
         if ($customer->invoice_settings->default_payment_method) {
             return new PaymentMethod($this, $customer->invoice_settings->default_payment_method);
         }
+
         // If we can't find a payment method, try to return a legacy source...
         return $customer->default_source;
     }
@@ -538,7 +561,7 @@ trait Billable
 
         $customer->invoice_settings = ['default_payment_method' => $paymentMethod->id];
 
-        $customer->save(Cashier::stripeOptions());
+        $customer->save($this->stripeOptions());
 
         // Next we will get the default payment method for this user so we can update the
         // payment method details on the record in the database. This will allow us to
@@ -696,7 +719,7 @@ trait Billable
         }
 
         return StripePaymentMethod::retrieve(
-            $paymentMethod, Cashier::stripeOptions($this->buildExtraPayload())
+            $paymentMethod, $this->stripeOptions()
         );
     }
 
@@ -786,15 +809,19 @@ trait Billable
      */
     public function createAsStripeCustomer(array $options = [])
     {
-        $options = array_key_exists('email', $options)
-                ? $options
-                : array_merge($options, ['email' => $this->email]);
+        if ($this->stripe_id) {
+            throw InvalidStripeCustomer::exists($this);
+        }
+
+        if (! array_key_exists('email', $options) && $email = $this->stripeEmail()) {
+            $options['email'] = $email;
+        }
 
         // Here we will create the customer instance on Stripe and store the ID of the
         // user from Stripe. This ID will correspond with the Stripe user instances
         // and allow us to retrieve users from Stripe later when we need to work.
         $this->pauseStripeAccount();
-        $customer = StripeCustomer::create( $options, Cashier::stripeOptions($this->buildExtraPayload()) );   
+        $customer = StripeCustomer::create( $options, $this->stripeOptions() );   
         $this->resumeStripeAccount();
 
         $this->stripe_id = $customer->id;
@@ -853,7 +880,7 @@ trait Billable
     public function updateStripeCustomer(array $options = [])
     {
         return StripeCustomer::update(
-            $this->stripe_id, $options, Cashier::stripeOptions()
+            $this->stripe_id, $options, $this->stripeOptions()
         );
     }
 
@@ -889,10 +916,21 @@ trait Billable
             if ( $customer )
                 $customer = $this->createAsStripeSharedCustomer();
         }else{
-            $customer = StripeCustomer::retrieve($this->stripe_id, $this->buildExtraPayload() );
+            $this->assertCustomerExists();
+            $customer = StripeCustomer::retrieve($this->stripe_id, $this->stripeOptions());
         }
      
         return $customer;
+    }
+
+    /**
+     * Get the email address used to create the customer in Stripe.
+     *
+     * @return string|null
+     */
+    public function stripeEmail()
+    {
+        return $this->email;
     }
 
     /**
@@ -923,6 +961,17 @@ trait Billable
     public function applicationFeePercent()
     {
         return 0;
+    }
+
+    /**
+     * Get the default Stripe API options for the current Billable model.
+     *
+     * @param  array  $options
+     * @return array
+     */
+    public function stripeOptions(array $options = [])
+    {
+        return Cashier::stripeOptions( array_merge($options, $this->buildExtraPayload()) );
     }
 
 }

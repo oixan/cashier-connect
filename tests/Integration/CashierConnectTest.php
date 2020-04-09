@@ -28,6 +28,8 @@ use Laravel\CashierConnect\Payment;
 use Laravel\CashierConnect\Subscription;
 use Laravel\CashierConnect\Exceptions\PaymentFailure;
 use Laravel\CashierConnect\Exceptions\PaymentActionRequired;
+use Laravel\CashierConnect\Cashier;
+use Stripe\Subscription as StripeSubscription;
 
 class CashierConnectTest extends IntegrationTestCase
 {
@@ -61,7 +63,7 @@ class CashierConnectTest extends IntegrationTestCase
      */
     protected static $couponId;
 
-    public static function setUpBeforeClass()
+    public static function setUpBeforeClass(): void
     {
         parent::setUpBeforeClass();
 
@@ -166,7 +168,7 @@ class CashierConnectTest extends IntegrationTestCase
         ], ["stripe_account" => static::$accountId ]);
     }
 
-    public static function tearDownAfterClass()
+    public static function tearDownAfterClass(): void
     {
         parent::tearDownAfterClass();
 
@@ -570,6 +572,48 @@ class CashierConnectTest extends IntegrationTestCase
         $this->assertEquals(Carbon::tomorrow()->hour(3)->minute(15), $subscription->trial_ends_at);
     }
 
+    public function test_subscription_changes_can_be_prorated()
+    {
+        $user = $this->createCustomer('subscription_changes_can_be_prorated');
+        $userAccount = $this->createCustomer2("taylor2@laravel.com", static::$accountId);
+
+        $subscription = $user->setStripeAccount($userAccount)->newSubscription('main', static::$premiumPlanId)->create('pm_card_visa');
+        $subscription = $subscription->setStripeAccount($userAccount);
+
+        $this->assertEquals(2000, ($invoice = $user->invoices()->first())->rawTotal());
+
+        $subscription->noProrate()->swapAndInvoice(static::$planId);
+
+        // Assert that no new invoice was created because of no prorating.
+        $this->assertEquals($invoice->id, $user->invoices()->first()->id);
+
+        $subscription->swapAndInvoice(static::$premiumPlanId);
+
+        // Assert that no new invoice was created because of no prorating.
+        $this->assertEquals($invoice->id, $user->invoices()->first()->id);
+
+        $subscription->prorate()->swapAndInvoice(static::$planId);
+
+        // Get back from unused time on premium plan.
+        $this->assertEquals(-1000, $user->invoices()->first()->rawTotal());
+    }
+
+    public function test_trials_can_be_extended()
+    {
+        $user = $this->createCustomer('trials_can_be_extended');
+        $userAccount = $this->createCustomer2("taylor2@laravel.com", static::$accountId);
+
+        $subscription = $user->setStripeAccount($userAccount)->newSubscription('main', static::$planId)->create('pm_card_visa');
+        $subscription = $subscription->setStripeAccount($userAccount);
+
+        $this->assertNull($subscription->trial_ends_at);
+
+        $subscription->extendTrial($trialEndsAt = now()->addDays()->floor());
+
+        $this->assertTrue($trialEndsAt->equalTo($subscription->trial_ends_at));
+        $this->assertEquals($subscription->asStripeSubscription()->trial_end, $trialEndsAt->getTimestamp());
+    }
+
     public function test_applying_coupons_to_existing_customers()
     {
         $user = $this->createCustomer('applying_coupons_to_existing_customers');
@@ -669,6 +713,20 @@ class CashierConnectTest extends IntegrationTestCase
         $this->assertFalse($user->subscriptions()->onGracePeriod()->exists());
         $this->assertTrue($user->subscriptions()->notOnGracePeriod()->exists());
         $this->assertTrue($user->subscriptions()->ended()->exists());
+
+        // Enable past_due as active state.
+        $this->assertFalse($subscription->active());
+        $this->assertFalse($user->subscriptions()->active()->exists());
+
+        Cashier::keepPastDueSubscriptionsActive();
+
+        $subscription->update(['ends_at' => null, 'stripe_status' => StripeSubscription::STATUS_PAST_DUE]);
+
+        $this->assertTrue($subscription->active());
+        $this->assertTrue($user->subscriptions()->active()->exists());
+
+        // Reset deactivate past due state to default to not conflict with other tests.
+        Cashier::$deactivatePastDue = true;
     }
 
     public function test_retrieve_the_latest_payment_for_a_subscription()
@@ -689,7 +747,6 @@ class CashierConnectTest extends IntegrationTestCase
             $this->assertTrue($payment->requiresAction());
         }
     }
-
 
     protected function getTestToken()
     {

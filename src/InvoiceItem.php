@@ -24,7 +24,7 @@ class InvoiceItem
      * Create a new invoice item instance.
      *
      * @param  \Illuminate\Database\Eloquent\Model  $owner
-     * @param  \Stripe\StripeObject  $item
+     * @param  \Stripe\InvoiceLineItem  $item
      * @return void
      */
     public function __construct($owner, $item)
@@ -110,6 +110,16 @@ class InvoiceItem
     protected function formatAmount($amount)
     {
         return Cashier::formatAmount($amount, $this->item->currency);
+    }
+
+    /**
+     * Get the Stripe model instance.
+     *
+     * @return \Illuminate\Database\Eloquent\Model
+     */
+    public function owner()
+    {
+        return $this->owner;
     }
 
     /**

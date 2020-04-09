@@ -11,11 +11,18 @@ use Money\Formatter\IntlMoneyFormatter;
 class Cashier
 {
     /**
+     * The Cashier library version.
+     *
+     * @var string
+     */
+    const VERSION = '10.7.1';
+
+    /**
      * The Stripe API version.
      *
      * @var string
      */
-    const STRIPE_VERSION = '2019-05-16';
+    const STRIPE_VERSION = '2019-08-14';
 
     /**
      * The custom currency formatter.
@@ -30,6 +37,37 @@ class Cashier
      * @var bool
      */
     public static $runsMigrations = true;
+
+    /**
+     * Indicates if Cashier routes will be registered.
+     *
+     * @var bool
+     */
+    public static $registersRoutes = true;
+
+    /**
+     * Indicates if Cashier will mark past due subscriptions as inactive.
+     *
+     * @var bool
+     */
+    public static $deactivatePastDue = true;
+
+    /**
+     * Get the billable entity instance by Stripe ID.
+     *
+     * @param  string  $stripeId
+     * @return \Laravel\Cashier\Billable|null
+     */
+    public static function findBillable($stripeId)
+    {
+        if ($stripeId === null) {
+            return;
+        }
+
+        $model = config('cashier.model');
+
+        return (new $model)->where('stripe_id', $stripeId)->first();
+    }
 
     /**
      * Get the default Stripe API options.
@@ -85,6 +123,30 @@ class Cashier
     public static function ignoreMigrations()
     {
         static::$runsMigrations = false;
+
+        return new static;
+    }
+
+      /**
+     * Configure Cashier to not register its routes.
+     *
+     * @return static
+     */
+    public static function ignoreRoutes()
+    {
+        static::$registersRoutes = false;
+
+        return new static;
+    }
+
+    /**
+     * Configure Cashier to maintain past due subscriptions as active.
+     *
+     * @return static
+     */
+    public static function keepPastDueSubscriptionsActive()
+    {
+        static::$deactivatePastDue = false;
 
         return new static;
     }

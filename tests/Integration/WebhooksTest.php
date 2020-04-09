@@ -8,6 +8,7 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Notification;
 use Laravel\CashierConnect\Notifications\ConfirmPayment;
 use Laravel\CashierConnect\Exceptions\PaymentActionRequired;
+use Laravel\CashierConnect\Tests\Integration\IntegrationTestCase;
 
 class WebhooksTest extends IntegrationTestCase
 {
@@ -21,7 +22,7 @@ class WebhooksTest extends IntegrationTestCase
      */
     protected static $planId;
 
-    public static function setUpBeforeClass()
+    public static function setUpBeforeClass(): void
     {
         parent::setUpBeforeClass();
 
@@ -45,7 +46,7 @@ class WebhooksTest extends IntegrationTestCase
         ]);
     }
 
-    public static function tearDownAfterClass()
+    public static function tearDownAfterClass(): void
     {
         parent::tearDownAfterClass();
 
@@ -55,8 +56,6 @@ class WebhooksTest extends IntegrationTestCase
 
     public function test_cancelled_subscription_is_properly_reactivated()
     {
-        $this->withoutExceptionHandling();
-
         $user = $this->createCustomer('cancelled_subscription_is_properly_reactivated');
         $subscription = $user->newSubscription('main', static::$planId)->create('pm_card_visa');
         $subscription->cancel();

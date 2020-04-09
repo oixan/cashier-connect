@@ -5,6 +5,7 @@ namespace Laravel\CashierConnect\Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use Laravel\CashierConnect\Subscription;
 use Laravel\CashierConnect\Exceptions\SubscriptionUpdateFailure;
+use InvalidArgumentException;
 
 class SubscriptionTest extends TestCase
 {
@@ -93,5 +94,12 @@ class SubscriptionTest extends TestCase
         $this->expectException(SubscriptionUpdateFailure::class);
 
         $subscription->updateQuantity(5);
+    }
+
+    public function test_extending_a_trial_requires_a_date_in_the_future()
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        (new Subscription)->extendTrial(now()->subDay());
     }
 }

@@ -1,7 +1,7 @@
 
 ## Introduction
 
-Laravel Cashier Connect add support for Stripe Connect Subscription to laravel Cashier (based on v10.0.0). 
+Laravel Cashier Connect add support for Stripe Connect Subscription to laravel Cashier (based on v10.7.1). 
 
 # Documentation
 

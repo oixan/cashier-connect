@@ -1,11 +1,14 @@
 <?php
 
-namespace Laravel\Cashier\Tests\Unit;
+namespace Laravel\CashierConnect\Tests\Unit;
 
 use Illuminate\Http\Request;
-use PHPUnit\Framework\TestCase;
+use Illuminate\Support\Facades\Event;
+use Laravel\CashierConnect\Events\WebhookHandled;
+use Laravel\CashierConnect\Events\WebhookReceived;
+use Laravel\CashierConnect\Http\Controllers\WebhookController;
+use Laravel\CashierConnect\Tests\TestCase;
 use Symfony\Component\HttpFoundation\Response;
-use Laravel\Cashier\Http\Controllers\WebhookController;
 
 class WebhookControllerTest extends TestCase
 {
@@ -13,7 +16,20 @@ class WebhookControllerTest extends TestCase
     {
         $request = $this->request('charge.succeeded');
 
+        Event::fake([
+            WebhookHandled::class,
+            WebhookReceived::class,
+        ]);
+
         $response = (new WebhookControllerTestStub)->handleWebhook($request);
+
+        Event::assertDispatched(WebhookReceived::class, function (WebhookReceived $event) use ($request) {
+            return $request->getContent() == json_encode($event->payload);
+        });
+
+        Event::assertDispatched(WebhookHandled::class, function (WebhookHandled $event) use ($request) {
+            return $request->getContent() == json_encode($event->payload);
+        });
 
         $this->assertEquals('Webhook Handled', $response->getContent());
     }
@@ -22,7 +38,18 @@ class WebhookControllerTest extends TestCase
     {
         $request = $this->request('foo.bar');
 
+        Event::fake([
+            WebhookHandled::class,
+            WebhookReceived::class,
+        ]);
+
         $response = (new WebhookControllerTestStub)->handleWebhook($request);
+
+        Event::assertDispatched(WebhookReceived::class, function (WebhookReceived $event) use ($request) {
+            return $request->getContent() == json_encode($event->payload);
+        });
+
+        Event::assertNotDispatched(WebhookHandled::class);
 
         $this->assertEquals(200, $response->getStatusCode());
     }

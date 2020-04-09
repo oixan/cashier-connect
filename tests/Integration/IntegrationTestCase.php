@@ -18,18 +18,21 @@ abstract class IntegrationTestCase extends TestCase
      */
     protected static $stripePrefix = 'cashier-test-';
 
-    public static function setUpBeforeClass()
+    public static function setUpBeforeClass(): void
     {
         parent::setUpBeforeClass();
 
-        $dotenv = Dotenv::create(__DIR__ . "/../..");
+        $dotenv = Dotenv::createImmutable(__DIR__ . "/../..");
         $dotenv->load();
 
         Stripe::setApiKey(getenv('STRIPE_SECRET'));
     }
 
-    public function setUp(): void
+    protected function setUp(): void
     {
+        // Delay consecutive tests to prevent Stripe rate limiting issues.
+        sleep(2);
+
         parent::setUp();
 
         Eloquent::unguard();
@@ -45,7 +48,7 @@ abstract class IntegrationTestCase extends TestCase
     {
         try {
             $resource->delete();
-        } catch (InvalidRequest $e) {
+        } catch (InvalidRequestException $e) {
             //
         }
     }
@@ -58,7 +61,7 @@ abstract class IntegrationTestCase extends TestCase
             'password' => '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
         ]);
     }
-
+    
     protected function createCustomer2($description = 'taylor2', $stripe_account_id = ''): User
     {
         return User::create([

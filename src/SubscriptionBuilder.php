@@ -196,6 +196,9 @@ class SubscriptionBuilder
      *
      * @param  array  $options
      * @return \Laravel\CashierConnect\Subscription
+     * 
+     * @throws \Laravel\Cashier\Exceptions\PaymentActionRequired
+     * @throws \Laravel\Cashier\Exceptions\PaymentFailure
      */
     public function add(array $options = [])
     {
@@ -208,6 +211,9 @@ class SubscriptionBuilder
      * @param  \Stripe\PaymentMethod|string|null  $paymentMethod
      * @param  array  $options
      * @return \Laravel\CashierConnect\Subscription
+     *
+     * @throws \Laravel\Cashier\Exceptions\PaymentActionRequired
+     * @throws \Laravel\Cashier\Exceptions\PaymentFailure     
      */
     public function create($paymentMethod = null, array $options = [])
     {
@@ -225,6 +231,7 @@ class SubscriptionBuilder
             $trialEndsAt = $this->trialExpires;
         }
 
+        /** @var \Laravel\Cashier\Subscription $subscription */
         $subscription = $this->owner->subscriptions()->create([
             'name' => $this->name,
             'stripe_id' => $stripeSubscription->id,
@@ -290,13 +297,14 @@ class SubscriptionBuilder
             'quantity' => $this->quantity,
             'tax_percent' => $this->getTaxPercentageForPayload(),
             'trial_end' => $this->getTrialEndForPayload(),
+            'off_session' => true
         ]);
     }
 
     /**
      * Get the trial ending date for the Stripe payload.
      *
-     * @return int|null
+     * @return int|string|null
      */
     protected function getTrialEndForPayload()
     {

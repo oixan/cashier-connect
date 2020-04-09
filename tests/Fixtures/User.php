@@ -2,9 +2,9 @@
 
 namespace Laravel\CashierConnect\Tests\Fixtures;
 
-use Laravel\CashierConnect\Billable;
-use Illuminate\Notifications\Notifiable;
 use Illuminate\Foundation\Auth\User as Model;
+use Illuminate\Notifications\Notifiable;
+use Laravel\CashierConnect\Billable;
 
 class User extends Model
 {

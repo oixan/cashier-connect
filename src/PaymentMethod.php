@@ -1,6 +1,7 @@
 <?php
 
 namespace Laravel\CashierConnect;
+use Laravel\CashierConnect\Exceptions\InvalidPaymentMethod;
 
 use Stripe\PaymentMethod as StripePaymentMethod;
 
@@ -26,9 +27,17 @@ class PaymentMethod
      * @param  \Illuminate\Database\Eloquent\Model  $owner
      * @param  \Stripe\PaymentMethod  $paymentMethod
      * @return void
+     *
+     * @throws \Laravel\Cashier\Exceptions\InvalidPaymentMethod
      */
     public function __construct($owner, StripePaymentMethod $paymentMethod)
     {
+        $customer = $owner->asStripeCustomer();
+
+        if ($customer->id !== $paymentMethod->customer) {
+            throw InvalidPaymentMethod::invalidOwner($paymentMethod, $owner);
+        }
+
         $this->owner = $owner;
         $this->paymentMethod = $paymentMethod;
     }
@@ -41,6 +50,16 @@ class PaymentMethod
     public function delete()
     {
         return $this->owner->removePaymentMethod($this->paymentMethod);
+    }
+
+    /**
+     * Get the Stripe model instance.
+     *
+     * @return \Illuminate\Database\Eloquent\Model
+     */
+    public function owner()
+    {
+        return $this->owner;
     }
 
     /**

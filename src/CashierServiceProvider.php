@@ -4,6 +4,8 @@ namespace Laravel\CashierConnect;
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+use Stripe\Stripe;
+use Stripe\Util\LoggerInterface;
 
 class CashierServiceProvider extends ServiceProvider
 {
@@ -14,10 +16,17 @@ class CashierServiceProvider extends ServiceProvider
      */
     public function boot()
     {
+        $this->registerLogger();
         $this->registerRoutes();
         $this->registerResources();
         $this->registerMigrations();
         $this->registerPublishing();
+
+        Stripe::setAppInfo(
+            'Laravel Cashier',
+            Cashier::VERSION,
+            'https://laravel.com'
+        );
     }
 
     /**
@@ -28,6 +37,8 @@ class CashierServiceProvider extends ServiceProvider
     public function register()
     {
         $this->configure();
+        $this->bindLogger();
+
     }
 
     /**
@@ -42,6 +53,32 @@ class CashierServiceProvider extends ServiceProvider
         );
     }
 
+     /**
+     * Bind the Stripe logger interface to the Cashier logger.
+     *
+     * @return void
+     */
+    protected function bindLogger()
+    {
+        $this->app->bind(LoggerInterface::class, function ($app) {
+            return new Logger(
+                $app->make('log')->channel(config('cashier.logger'))
+            );
+        });
+    }
+
+    /**
+     * Register the Stripe logger.
+     *
+     * @return void
+     */
+    protected function registerLogger()
+    {
+        if (config('cashier.logger')) {
+            Stripe::setLogger($this->app->make(LoggerInterface::class));
+        }
+    }
+
     /**
      * Register the package routes.
      *
@@ -49,13 +86,15 @@ class CashierServiceProvider extends ServiceProvider
      */
     protected function registerRoutes()
     {
-        Route::group([
-            'prefix' => config('cashier.path'),
-            'namespace' => 'Laravel\CashierConnect\Http\Controllers',
-            'as' => 'cashier.',
-        ], function () {
-            $this->loadRoutesFrom(__DIR__.'/../routes/web.php');
-        });
+        if (Cashier::$registersRoutes) {
+            Route::group([
+                'prefix' => config('cashier.path'),
+                'namespace' => 'Laravel\CashierConnect\Http\Controllers',
+                'as' => 'cashier.',
+            ], function () {
+                $this->loadRoutesFrom(__DIR__.'/../routes/web.php');
+            });
+        }
     }
 
     /**

@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\View;
 use Stripe\Invoice as StripeInvoice;
 use Stripe\InvoiceLineItem as StripeInvoiceLineItem;
 use Symfony\Component\HttpFoundation\Response;
+use Laravel\CashierConnect\Exceptions\InvalidInvoice;
 
 class Invoice
 {
@@ -25,6 +26,7 @@ class Invoice
      * @var \Stripe\Invoice
      */
     protected $invoice;
+    
 
     /**
      * The Stripe invoice items.
@@ -39,9 +41,17 @@ class Invoice
      * @param  \Illuminate\Database\Eloquent\Model  $owner
      * @param  \Stripe\Invoice  $invoice
      * @return void
+     *
+     * @throws \Laravel\Cashier\Exceptions\InvalidInvoice
      */
     public function __construct($owner, StripeInvoice $invoice)
     {
+        $customer = $owner->asStripeCustomer();
+
+        if ($customer->id !== $invoice->customer) {
+            throw InvalidInvoice::invalidOwner($invoice, $owner);
+        }
+
         $this->owner = $owner;
         $this->invoice = $invoice;
     }

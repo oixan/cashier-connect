@@ -5,6 +5,7 @@ namespace Laravel\CashierConnect\Tests\Unit;
 use Carbon\Carbon;
 use PHPUnit\Framework\TestCase;
 use Laravel\CashierConnect\Tests\Fixtures\User;
+use Laravel\CashierConnect\Exceptions\InvalidStripeCustomer;
 
 class CustomerTest extends TestCase
 {
@@ -40,5 +41,24 @@ class CustomerTest extends TestCase
         $user = new User;
 
         $this->assertNull($user->defaultPaymentMethod());
+    }
+
+    public function test_stripe_customer_method_throws_exception_when_stripe_id_is_not_set()
+    {
+        $user = new User;
+
+        $this->expectException(InvalidStripeCustomer::class);
+
+        $user->asStripeCustomer();
+    }
+
+    public function test_stripe_customer_cannot_be_created_when_stripe_id_is_already_set()
+    {
+        $user = new User();
+        $user->stripe_id = 'foo';
+
+        $this->expectException(InvalidStripeCustomer::class);
+
+        $user->createAsStripeCustomer();
     }
 }

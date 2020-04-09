@@ -12,12 +12,14 @@ use Illuminate\Routing\Controller;
 use Illuminate\Notifications\Notifiable;
 use Symfony\Component\HttpFoundation\Response;
 use Stripe\PaymentIntent as StripePaymentIntent;
+use Laravel\CashierConnect\Events\WebhookHandled;
+use Laravel\CashierConnect\Events\WebhookReceived;
 use Laravel\CashierConnect\Http\Middleware\VerifyWebhookSignature;
 
 class WebhookController extends Controller
 {
     /**
-     * Create a new webhook controller instance.
+     * Create a new WebhookController instance.
      *
      * @return void
      */
@@ -39,8 +41,14 @@ class WebhookController extends Controller
         $payload = json_decode($request->getContent(), true);
         $method = 'handle'.Str::studly(str_replace('.', '_', $payload['type']));
 
+        WebhookReceived::dispatch($payload);
+
         if (method_exists($this, $method)) {
-            return $this->{$method}($payload);
+            $response = $this->{$method}($payload);
+
+            WebhookHandled::dispatch($payload);
+
+            return $response;
         }
 
         return $this->missingMethod();
@@ -49,13 +57,11 @@ class WebhookController extends Controller
     /**
      * Handle customer subscription updated.
      *
-     * @param  array $payload
+     * @param  array  $payload
      * @return \Symfony\Component\HttpFoundation\Response
      */
     protected function handleCustomerSubscriptionUpdated(array $payload)
     {
-        $user = $this->getUserByStripeId($payload['data']['object']['customer']);
-
         if ($user = $this->getUserByStripeId($payload['data']['object']['customer'])) {
             $data = $payload['data']['object'];
 
@@ -80,10 +86,10 @@ class WebhookController extends Controller
 
                 // Trial ending date...
                 if (isset($data['trial_end'])) {
-                    $trial_ends = Carbon::createFromTimestamp($data['trial_end']);
+                    $trialEnd = Carbon::createFromTimestamp($data['trial_end']);
 
-                    if (! $subscription->trial_ends_at || $subscription->trial_ends_at->ne($trial_ends)) {
-                        $subscription->trial_ends_at = $trial_ends;
+                    if (! $subscription->trial_ends_at || $subscription->trial_ends_at->ne($trialEnd)) {
+                        $subscription->trial_ends_at = $trialEnd;
                     }
                 }
 
@@ -132,7 +138,7 @@ class WebhookController extends Controller
     /**
      * Handle customer updated.
      *
-     * @param  array $payload
+     * @param  array  $payload
      * @return \Symfony\Component\HttpFoundation\Response
      */
     protected function handleCustomerUpdated(array $payload)
@@ -147,7 +153,7 @@ class WebhookController extends Controller
     /**
      * Handle deleted customer.
      *
-     * @param  array $payload
+     * @param  array  $payload
      * @return \Symfony\Component\HttpFoundation\Response
      */
     protected function handleCustomerDeleted(array $payload)
@@ -184,7 +190,7 @@ class WebhookController extends Controller
             if (in_array(Notifiable::class, class_uses_recursive($user))) {
                 $payment = new Payment(StripePaymentIntent::retrieve(
                     $payload['data']['object']['payment_intent'],
-                    Cashier::stripeOptions()
+                    $user->stripeOptions()
                 ));
 
                 $user->notify(new $notification($payment));
@@ -202,13 +208,7 @@ class WebhookController extends Controller
      */
     protected function getUserByStripeId($stripeId)
     {
-        if ($stripeId === null) {
-            return;
-        }
-
-        $model = config('cashier.model');
-
-        return (new $model)->where('stripe_id', $stripeId)->first();
+        return Cashier::findBillable($stripeId);
     }
 
     /**

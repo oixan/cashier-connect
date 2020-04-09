@@ -99,4 +99,32 @@ return [
 
     'payment_notification' => env('CASHIER_PAYMENT_NOTIFICATION'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Invoice Paper Size
+    |--------------------------------------------------------------------------
+    |
+    | This option is the default paper size for all invoices generated using
+    | Cashier. You are free to customize this settings based on the usual
+    | paper size used by the customers using your Laravel applications.
+    |
+    | Supported sizes: 'letter', 'legal', 'A4'
+    |
+    */
+
+    'paper' => env('CASHIER_PAPER', 'letter'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Stripe Logger
+    |--------------------------------------------------------------------------
+    |
+    | This setting defines which logging channel will be used by the Stripe
+    | library to write log messages. You are free to specify any of your
+    | logging channels listed inside the "logging" configuration file.
+    |
+    */
+
+    'logger' => env('CASHIER_LOGGER'),
+    
 ];
