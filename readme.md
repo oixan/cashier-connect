@@ -45,7 +45,7 @@ $user->resumeStripeAccount  // Resume the previous userAccount, cashier call wil
 
 *** IMPORTANT *** any further call after setStripeAccount() will be direct to Stripe Account so remember to call unsetStripeAccount() if needed.
 
-## Methods Supperted (Version 0.3.0).
+## Methods Supported (Version 0.3.0).
 
 The ``` setStripeAccount($userAccount) ``` method make every subsequent call goes from your Platform to Stripe Account passed like parameter. If you need to change the userAccount or pause the StripeAccount call see the previous section.
 
